@@ -51,6 +51,8 @@ fn check_hotplug_activity(last_timestamp: &mut u64, wait_time: u64) -> bool {
 }
 
 pub fn udev() {
+    debug!("starting udev");
+
     let mut socket = Socket::new(NETLINK_KOBJECT_UEVENT).unwrap();
     let sa = SocketAddr::new(process::id(), 1);
     socket.bind(&sa).unwrap();
@@ -59,8 +61,8 @@ pub fn udev() {
         let n = socket.recv_from_full().unwrap();
         let uevent = UEvent::from_netlink_packet(&n.0).unwrap();
 
-        info!(">> {}", std::str::from_utf8(&n.0).unwrap());
-        info!("{:#?}", uevent);
+        debug!(">> {}", std::str::from_utf8(&n.0).unwrap());
+        trace!("{:#?}", uevent);
 
         if uevent.action == ActionType::Add && is_nvidia_gpu(&uevent) && hotplug_device(5) {
             info!("hotplug activity finished, proceeding.");

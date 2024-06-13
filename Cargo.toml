@@ -1,15 +1,16 @@
 [package]
-name = "nvidia-init"
+name = "NVRC"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 anyhow = "1.0.44"
-nix = { version =  "0.29.0", features = ["fs", "mount", "user", "process"] }
+nix = { version =  "0.29.0", features = ["fs", "mount", "user", "process", "reboot"] }
 log = "0.4"
 kernlog = "0.3"
 kobject-uevent = "0.1.1"
 netlink-sys = "0.8.6"
+lazy_static = "1.4.0"
 
 [profile.release]
 opt-level = "s"

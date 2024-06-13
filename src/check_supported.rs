@@ -3,20 +3,29 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
-pub fn check_gpu_supported(
-    gpu_device_ids: &Vec<String>,
-    supported_gpu_devids: &Path,
-) -> Result<bool> {
-    if !supported_gpu_devids.exists() {
-        println!(
-            "nvidia: {} file not found, skipping check",
-            supported_gpu_devids.display()
-        );
-        return Ok(false);
+use super::NVRC;
+
+pub fn check_gpu_supported(context: &mut NVRC, supported: Option<&Path>) -> Result<()> {
+
+    if context.gpu_devids.is_empty() {
+        debug!("No GPUs found, skipping GPU supported check");
+        return Ok(())
     }
 
-    let file = File::open(supported_gpu_devids)
-        .context(format!("Failed to open {:?}", supported_gpu_devids))?;
+
+    let supported = match supported {
+        Some(supported) => supported,
+        None => Path::new("/supported-gpu.devids"),
+    };
+
+    if !supported.exists() {
+        return Err(anyhow::anyhow!(
+            "{} file not found, cannot verify GPU support",
+            supported.display()
+        ))
+    }
+
+    let file = File::open(supported).context(format!("Failed to open {:?}", supported))?;
     let reader = BufReader::new(file);
 
     let supported_ids: Vec<String> = reader
@@ -24,14 +33,13 @@ pub fn check_gpu_supported(
         .map(|line| line.expect("Could not read line"))
         .collect();
 
-    for devid in gpu_device_ids {
+    for devid in context.gpu_devids.iter() {
         if !supported_ids.contains(devid) {
-            println!("GPU {} is not supported, returning", devid);
-            return Ok(false);
+            return Err(anyhow::anyhow!("GPU {} is not supported", devid));
         }
     }
-
-    Ok(true)
+    context.gpu_supported = true;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -39,9 +47,9 @@ mod tests {
     use super::*;
     #[test]
     fn test_check_gpu_supported() {
-        let gpu_device_ids = &vec!["0x2330".to_string()];
-        let supported_gpu_devids = Path::new("/supported-gpu.devids");
-        let result = check_gpu_supported(gpu_device_ids, supported_gpu_devids).unwrap();
-        assert_eq!(result, true);
+        let mut context = NVRC::default();
+        context.gpu_devids = vec!["0x2330".to_string()];
+        check_gpu_supported(&mut context, None).unwrap();
+        assert_eq!(context.gpu_supported, true);
     }
 }

@@ -1,10 +1,17 @@
 use anyhow::{Context, Result};
 use std::process::Command;
 
-pub fn query_gpu_cc_mode(gpu_bdfs: &Vec<String>) -> Result<String> {
+use super::NVRC;
+
+pub fn query_gpu_cc_mode(context: &mut NVRC) -> Result<()> {
     let mut mode: Option<String> = None;
 
-    for bdf in gpu_bdfs {
+    if context.gpu_bdfs.is_empty() {
+        debug!("No GPUs found, skipping CC mode query");
+        return Ok(())
+    }
+
+    for bdf in &context.gpu_bdfs {
         let output = Command::new("/sbin/nvidia_gpu_tools")
             .args([
                 "--mmio-access-type=sysfs",
@@ -35,6 +42,8 @@ pub fn query_gpu_cc_mode(gpu_bdfs: &Vec<String>) -> Result<String> {
             _ => mode = Some(current_mode),
         }
     }
+    debug!("CC mode is: {}", mode.as_ref().unwrap());
+    context.gpu_cc_mode = mode;
 
-    mode.ok_or_else(|| anyhow::anyhow!("No GPUs found"))
+    Ok(())
 }

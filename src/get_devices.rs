@@ -2,7 +2,14 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
 
-pub fn get_gpu_devices(base_path: &Path) -> Result<(Vec<String>, Vec<String>)> {
+use super::NVRC;
+
+pub fn get_gpu_devices(context: &mut NVRC, base_path: Option<&Path>) -> Result<()> {
+    let base_path = match base_path {
+        Some(path) => path.to_path_buf(),
+        None => Path::new("/sys/bus/pci").to_path_buf(),
+    };
+
     let mut gpu_bdfs = Vec::new();
     let mut gpu_device_ids = Vec::new();
 
@@ -44,7 +51,18 @@ pub fn get_gpu_devices(base_path: &Path) -> Result<(Vec<String>, Vec<String>)> {
         }
     }
 
-    Ok((gpu_bdfs, gpu_device_ids))
+    context.gpu_bdfs = gpu_bdfs;
+    context.gpu_devids = gpu_device_ids;
+
+    if context.gpu_bdfs.is_empty() {
+        debug!("No GPUs found, hot-plugging");
+        context.cold_plug = false;
+    } else {
+        debug!("GPUs found, cold-plugging");
+        context.cold_plug = true;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -55,6 +73,7 @@ mod tests {
 
     #[test]
     fn test_get_gpu_devices() -> Result<()> {
+        let mut context = NVRC::default();
         let temp_dir = tempdir()?;
         let base_path = temp_dir.path();
 
@@ -84,25 +103,26 @@ mod tests {
         write(non_gpu_device_path.join("device"), "abcd")?;
 
         // Run the function with the mock PCI space
-        let (gpu_bdfs, gpu_device_ids) = get_gpu_devices(base_path)?;
+        get_gpu_devices(&mut context, Some(base_path)).unwrap();
 
-        // Check the results
-        assert_eq!(gpu_bdfs.len(), 2);
-        assert!(gpu_bdfs.contains(&"0000:01:00.0".to_string()));
-        assert!(gpu_bdfs.contains(&"0000:02:00.0".to_string()));
+        // Checkcontext. the results
+        assert_eq!(context.gpu_bdfs.len(), 2);
+        assert!(context.gpu_bdfs.contains(&"0000:01:00.0".to_string()));
+        assert!(context.gpu_bdfs.contains(&"0000:02:00.0".to_string()));
 
-        assert_eq!(gpu_device_ids.len(), 2);
-        assert!(gpu_device_ids.contains(&"1234".to_string()));
-        assert!(gpu_device_ids.contains(&"5678".to_string()));
+        assert_eq!(context.gpu_devids.len(), 2);
+        assert!(context.gpu_devids.contains(&"1234".to_string()));
+        assert!(context.gpu_devids.contains(&"5678".to_string()));
 
         Ok(())
     }
 
     #[test]
     fn test_get_gpu_devices_baremetal() {
-        let (bdfs, devids) = get_gpu_devices(Path::new("/sys/bus/pci")).unwrap();
+        let mut context = NVRC::default();
+        get_gpu_devices(&mut context, None).unwrap();
 
-        println!("BDFs: {:?}", bdfs);
-        println!("DEVIDSs: {:?}", devids);
+        println!("BDFs: {:?}", context.gpu_bdfs);
+        println!("DEVIDSs: {:?}", context.gpu_devids);
     }
 }
